@@ -1,0 +1,208 @@
+/*Train Data - altered*/
+PROC IMPORT OUT = WORK.train
+		DATAFILE = '/home/lsterling0/Imports/train.csv'
+		DBMS=CSV REPLACE;
+	GETNAMES=YES;
+RUN;
+
+/*We need to add a sales column to the test set*/
+data test;
+set test;
+SalePrice = .;
+run;
+
+/*We want to remove extreme values from the original data set that we determined were outliers*/
+data train;
+set train;
+if BSMTFinSF1 > 5600 then delete;
+if GrLivArea > 4000 then delete;
+if MiscVal > 8000 then delete;
+run;
+
+/*Convert LotFrontage from character to numerical and rename to LotFrontage*/
+/*This also combines test and train together*/
+data Train2;
+set Train test;
+LotFrontageNum = input(LotFrontage, 8.);
+drop LotFrontage;
+rename LotFrontageNum=LotFrontage;
+run;
+
+/*Check LotFrontage to ensure stored as numeric. Will appear to far right*/
+proc contents data=Train2;
+run;
+
+/*We want to log certain variables based on assumptions*/
+data train2;
+set train2;
+logsaleprice = log(saleprice);
+logBSMTFinSF1 = log(BSMTFinSF1);
+logTotalBSMTSF = log(TotalBSMTSF);
+logGrLivArea = log(GrLivArea);
+run;
+
+
+/*Forward Selection (kaggle = .14302)*/
+proc glmselect data=train2 plots=all;
+class MSZoning Street Alley LotShape LandContour Utilities LotConfig LandSlope Neighborhood Condition1 Condition2 BldgType HouseStyle RoofStyle RoofMatl Exterior1st Exterior2nd MasVnrType ExterQual ExterCond Foundation BsmtQual BsmtCond BsmtExposure BsmtFinType1 BsmtFinType2 Heating HeatingQC CentralAir Electrical KitchenQual Functional FireplaceQu GarageType GarageFinish GarageQual GarageCond PavedDrive PoolQC Fence MiscFeature SaleType SaleCondition;
+model logSalePrice = MSSubClass LotFrontage LotArea OverallQual OverallCond YearBuilt YearRemodAdd MasVnrArea BsmtFinSF1 BsmtFinSF2 BsmtUnfSF TotalBsmtSF FirstFlrSF SecondFlrSF LowQualFinSF GrLivArea BsmtFullBath BsmtHalfBath FullBath HalfBath BedroomAbvGr KitchenAbvGr TotRmsAbvGrd Fireplaces GarageYrBlt GarageCars GarageArea WoodDeckSF OpenPorchSF EnclosedPorch ThirdSsnPorch ScreenPorch PoolArea MiscVal MoSold YrSold / selection=Forward(stop=CV) cvmethod=random(5) stats=adjrsq;
+output out = results2 p=predict;
+run;
+/*checking assumptions for forward*/
+/*creates scatterplot matrix forward*/
+proc sgscatter data=train2;
+matrix logSalePrice OverallQual GrLivArea BsmtFinSF1 YearBuilt OverallCond TotalBsmtSF;
+run;
+
+/*overall plots & VIF forward*/
+proc reg data=train2 plots=all;
+model logSalePrice = OverallQual GrLivArea BsmtFinSF1 YearBuilt OverallCond TotalBsmtSF / VIF;
+run;
+
+/*Initial Backward Selection (kaggle = 2.83129)*/
+proc glmselect data=train2 plots=all;
+class MSZoning Street Alley LotShape LandContour Utilities LotConfig LandSlope Neighborhood Condition1 Condition2 BldgType HouseStyle RoofStyle RoofMatl Exterior1st Exterior2nd MasVnrType ExterQual ExterCond Foundation BsmtQual BsmtCond BsmtExposure BsmtFinType1 BsmtFinType2 Heating HeatingQC CentralAir Electrical KitchenQual Functional FireplaceQu GarageType GarageFinish GarageQual GarageCond PavedDrive PoolQC Fence MiscFeature SaleType SaleCondition;
+model SalePrice = MSSubClass LotFrontage LotArea OverallQual OverallCond YearBuilt YearRemodAdd MasVnrArea BsmtFinSF1 BsmtFinSF2 BsmtUnfSF TotalBsmtSF FirstFlrSF SecondFlrSF LowQualFinSF GrLivArea BsmtFullBath BsmtHalfBath FullBath HalfBath BedroomAbvGr KitchenAbvGr TotRmsAbvGrd Fireplaces GarageYrBlt GarageCars GarageArea WoodDeckSF OpenPorchSF EnclosedPorch ThirdSsnPorch ScreenPorch PoolArea MiscVal MoSold YrSold / selection=Backward(stop=CV) cvmethod=random(5) stats=adjrsq;
+output out = results2 p=predict;
+run;
+
+/*Variables removed from initial Backward approach*/
+BsmtFinSF2
+BsmtFullBath
+FullBath	
+HalfBath
+Fireplaces
+WoodDeckSF
+EnclosedPorch
+ThirdSsnPorch
+PoolArea
+MiscVal
+MoSold
+YrSold
+GarageYrBlt
+MSSubClass
+YearRemodAdd 
+MasVnrArea
+BsmtFinSF1 
+BsmtUnfSF 
+SecondFlrSF 
+LowQualFinSF 
+BsmtHalfBath 
+BedroomAbvGr 
+KitchenAbvGr 
+GarageArea 
+ScreenPorch */
+
+proc print data=train2 (firstobs=1450 obs=1470);
+run;
+
+/*Check Assumptions for Backward*/
+proc glm data=train plots=all;
+class MSZoning Street Alley LotShape LandContour Utilities LotConfig LandSlope Neighborhood Condition1 Condition2 BldgType HouseStyle RoofStyle RoofMatl Exterior1st Exterior2nd MasVnrType ExterQual ExterCond Foundation BsmtQual BsmtCond BsmtExposure BsmtFinType1 BsmtFinType2 Heating HeatingQC CentralAir Electrical KitchenQual Functional FireplaceQu GarageType GarageFinish GarageQual GarageCond PavedDrive PoolQC Fence MiscFeature SaleType SaleCondition;
+model logSalePrice = LotFrontage logLotArea OverallQual YearBuilt TotalBsmtSF FirstFlrSF GrLivArea TotRmsAbvGrd GarageCars OpenPorchSF / solution;
+run;
+
+/*Check matrix for Backward to determine variables that can be removed*/
+proc sgscatter data=train;
+matrix logSalePrice LotFrontage logLotArea OverallQual YearBuilt TotalBsmtSF FirstFlrSF GrLivArea TotRmsAbvGrd GarageCars OpenPorchSF;
+run;
+
+
+/*Backward Selection PartII*/
+proc glm data=train2 plots=all;
+model logSalePrice = LotFrontage logLotArea OverallQual YearBuilt TotalBsmtSF FirstFlrSF GrLivArea TotRmsAbvGrd GarageCars OpenPorchSF / ;
+output out = results p=predict;
+run;
+
+/*transforming the sales price and changing any negative values*/
+data results2;
+set results;
+if predict > 0 then SalePrice = exp(Predict);
+if predict < 0 then SalePrice = 10000;
+keep id SalePrice;
+where id > 1460;
+run;
+
+proc export data = results2 outfile = _dataout dbms = csv replace;
+run;
+
+data train2;
+set train test;
+run;
+
+proc print data=train2 (firstobs=1450 obs=1470);
+run;
+
+/*Check Assumptions for Backward*/
+proc glm data=train plots=all;
+class MSZoning Street Alley LotShape LandContour Utilities LotConfig LandSlope Neighborhood Condition1 Condition2 BldgType HouseStyle RoofStyle RoofMatl Exterior1st Exterior2nd MasVnrType ExterQual ExterCond Foundation BsmtQual BsmtCond BsmtExposure BsmtFinType1 BsmtFinType2 Heating HeatingQC CentralAir Electrical KitchenQual Functional FireplaceQu GarageType GarageFinish GarageQual GarageCond PavedDrive PoolQC Fence MiscFeature SaleType SaleCondition;
+model logSalePrice = LotFrontage logLotArea OverallQual YearBuilt TotalBsmtSF FirstFlrSF GrLivArea TotRmsAbvGrd GarageCars OpenPorchSF / solution;
+run;
+
+/*Check matrix for Backward to determine variables that can be removed*/
+proc sgscatter data=train;
+matrix logSalePrice LotFrontage logLotArea OverallQual YearBuilt TotalBsmtSF FirstFlrSF GrLivArea TotRmsAbvGrd GarageCars OpenPorchSF;
+run;
+
+/*Backward Selection (kaggle = 2.83129)*/
+proc glm data=train2 plots=all;
+class Neighborhood;
+model logSalePrice = LotFrontage logLotArea OverallQual YearBuilt TotalBsmtSF FirstFlrSF GrLivArea TotRmsAbvGrd GarageCars | Neighborhood / ;
+output out = results p=predict;
+run;
+
+proc print data=results (firstobs=1450 obs=1470);
+run;
+
+/*Stepwise (kaggle = .14302)*/
+proc glmselect data=train2 plots=all;
+class MSZoning Street Alley LotShape LandContour Utilities LotConfig LandSlope Neighborhood Condition1 Condition2 BldgType HouseStyle RoofStyle RoofMatl Exterior1st Exterior2nd MasVnrType ExterQual ExterCond Foundation BsmtQual BsmtCond BsmtExposure BsmtFinType1 BsmtFinType2 Heating HeatingQC CentralAir Electrical KitchenQual Functional FireplaceQu GarageType GarageFinish GarageQual GarageCond PavedDrive PoolQC Fence MiscFeature SaleType SaleCondition;
+model logSalePrice = MSSubClass LotFrontage LotArea OverallQual OverallCond YearBuilt YearRemodAdd MasVnrArea BsmtFinSF1 BsmtFinSF2 BsmtUnfSF TotalBsmtSF FirstFlrSF SecondFlrSF LowQualFinSF GrLivArea BsmtFullBath BsmtHalfBath FullBath HalfBath BedroomAbvGr KitchenAbvGr TotRmsAbvGrd Fireplaces GarageYrBlt GarageCars GarageArea WoodDeckSF OpenPorchSF EnclosedPorch ThirdSsnPorch ScreenPorch PoolArea MiscVal MoSold YrSold / selection=Stepwise(stop=CV) cvmethod=random(5) stats=adjrsq;
+output out = results2 p=predict;
+run;
+
+/*checking assumptions for step*/
+/*creates scatterplot matrix step*/
+proc sgscatter data=train2;
+matrix logSalePrice OverallQual GrLivArea BsmtFinSF1 YearBuilt OverallCond TotalBsmtSF;
+run;
+
+/*overall plots & VIF step*/
+proc reg data=train2 plots=all;
+model logSalePrice = OverallQual GrLivArea BsmtFinSF1 YearBuilt OverallCond TotalBsmtSF / VIF;
+run;
+
+/*Custom - results13.csv (kaggle = .15318)*/
+proc glm data = train2 plots = all;
+class Neighborhood;
+model logSalePrice = OverallQual logGrLivArea |Neighborhood BsmtFinSF1 YearBuilt | Neighborhood OverallCond |Neighborhood TotalBsmtSF | Neighborhood /  ;
+output out = results2 p = predict;
+run;
+
+/*Custom - Used this code to generate the cvpress for the variables – does not include the interaction terms*/
+proc glmselect data = train2 plots = all;
+class Neighborhood;
+model logSalePrice = OverallQual logGrLivArea |Neighborhood BsmtFinSF1 YearBuilt | Neighborhood OverallCond |Neighborhood TotalBsmtSF | Neighborhood / stats=press;
+output out = results2 p = predict;
+run;
+
+/*Custom - Gives the equation and r-squares including the interaction terms*/
+proc glm data = train2 plots = all;
+class Neighborhood;
+model logSalePrice = OverallQual logGrLivArea |Neighborhood BsmtFinSF1 YearBuilt | Neighborhood OverallCond |Neighborhood TotalBsmtSF | Neighborhood /cli solution;
+output out = results2 p = predict;
+run;
+
+
+/*transforming the sales price and changing any negative values*/
+data results3;
+set results2;
+if predict > 0 then SalePrice = exp(Predict);
+/*if predict > 0 then SalePrice = Predict;*/
+if predict < 0 then SalePrice = 10000;
+keep id SalePrice;
+where id > 1460;
+run;	
+
+proc export data = results3 outfile = _dataout dbms = csv replace;
+run;
