@@ -1,0 +1,156 @@
+/*Test Data - altered column names*/
+PROC IMPORT OUT = WORK.test
+		DATAFILE = '/home/lsterling0/Imports/test.csv'
+		DBMS=CSV REPLACE;
+	GETNAMES=YES;
+RUN;
+
+/*Train Data - altered column names*/
+PROC IMPORT OUT = WORK.train
+		DATAFILE = '/home/lsterling0/Imports/train.csv'
+		DBMS=CSV REPLACE;
+	GETNAMES=YES;
+RUN;
+
+
+/*We need to add a SalePrice column to the test set*/
+data test;
+set test;
+SalePrice = .;
+run;
+
+/*We need to look into outliers of the data*/
+
+/*LotFrontage is saved as a character when it should be saved as numeric*/
+*We also need to combine test and train into one dataset - train2;
+data Train2;
+set Train test; *combining the sets together;
+LotFrontageNum = input(LotFrontage, 8.); *Creating a new numeric column with values from LotFrontage;
+drop LotFrontage; *deleting the character column LotFrontage;
+rename LotFrontageNum=LotFrontage; *renaming the numeric column to match the original column name;
+run;
+
+/*Let's go ahead and log SalePrice*/
+data Train2;
+set Train2;
+logSalePrice = log(SalePrice);
+run;
+*From here on out we will be using train2;
+
+/*EXPLORATORY ANALYSIS*/
+
+/*Here I separated all of the variables, along with SalePrice, into 4 different matrices because running them all together got really small*/
+
+*MSSubClass LotFrontage LotArea OverallQual OverallCond YearBuilt YearRemodAdd MasVnrArea;
+proc sgscatter data=train2;
+matrix logSalePrice MSSubClass LotFrontage LotArea OverallQual OverallCond YearBuilt YearRemodAdd MasVnrArea;
+run;
+
+*BsmtFinSF1 BsmtFinSF2 BsmtUnfSF TotalBsmtSF FirstFlrSF SecondFlrSF LowQualFinSF GrLivArea;
+proc sgscatter data=train2;
+matrix SalePric BsmtFinSF1 BsmtFinSF2 BsmtUnfSF TotalBsmtSF FirstFlrSF SecondFlrSF LowQualFinSF GrLivArea;
+run;
+
+*BsmtFullBath BsmtHalfBath FullBath HalfBath BedroomAbvGr KitchenAbvGr TotRmsAbvGrd Fireplaces;
+proc sgscatter data = train2;
+matrix SalePrice BsmtFullBath BsmtHalfBath FullBath HalfBath BedroomAbvGr KitchenAbvGr TotRmsAbvGrd Fireplaces;
+run;
+
+*GarageYrBlt GarageCars GarageArea WoodDeckSF OpenPorchSF EnclosedPorch ThreeSsnPorch ScreenPorch PoolArea MiscVal MoSold YrSold;
+proc sgscatter data=train2;
+matrix SalePrice GarageYrBlt GarageCars GarageArea WoodDeckSF OpenPorchSF EnclosedPorch ThreeSsnPorch ScreenPorch PoolArea MiscVal MoSold YrSold;
+run;
+
+/*Now that we have logged values that seemed to be off, we can start looking for any outliers*/
+*I am not sure that proc glm is the best way to look at outliers when there are so many class variables;
+proc glm data=Train2 plots = all;
+class ; *should we include all?;
+*model logSalePrice ; *Use this if logSalePrice looks better;
+model SalePrice = /solution; *insert variable being considered;
+run;
+
+/*FORWARD SELECTION*/
+*Not including any logged variables;
+proc glmselect data=train2 plots=all;
+class MSZoning Street Alley LotShape LandContour Utilities LotConfig LandSlope Neighborhood Condition1 Condition2 BldgType HouseStyle RoofStyle RoofMatl Exterior1st Exterior2nd MasVnrType ExterQual ExterCond Foundation BsmtQual BsmtCond BsmtExposure BsmtFinType1 BsmtFinType2 Heating HeatingQC CentralAir Electrical KitchenQual Functional FireplaceQu GarageType GarageFinish GarageQual GarageCond PavedDrive PoolQC Fence MiscFeature SaleType SaleCondition;
+model SalePrice = MSSubClass LotFrontage LotArea OverallQual OverallCond YearBuilt YearRemodAdd MasVnrArea BsmtFinSF1 BsmtFinSF2 BsmtUnfSF TotalBsmtSF FirstFlrSF SecondFlrSF LowQualFinSF GrLivArea BsmtFullBath BsmtHalfBath FullBath HalfBath BedroomAbvGr KitchenAbvGr TotRmsAbvGrd Fireplaces GarageYrBlt GarageCars GarageArea WoodDeckSF OpenPorchSF EnclosedPorch ThreeSsnPorch ScreenPorch PoolArea MiscVal MoSold YrSold / selection=Forward(stop=CV) cvmethod=random(5) stats=adjrsq;
+output out = results2 p=predict;
+run;
+/*Check assumptions for given model*/
+*Scatterplot Matrix;
+proc sgscatter data=train2;
+matrix ;
+run;
+
+*Assumption plots and VIF;
+proc reg data=train2 plots=all;
+model / VIF;
+run;
+
+/*Get confidence intervals for final model */
+proc glm data = train2 plots = all;
+class ;
+model /solution clparm;
+run;
+
+/*BACKWARD SELECTION*/
+*Not including any logged variables;
+proc glmselect data=train2 plots=all;
+class MSZoning Street Alley LotShape LandContour Utilities LotConfig LandSlope Neighborhood Condition1 Condition2 BldgType HouseStyle RoofStyle RoofMatl Exterior1st Exterior2nd MasVnrType ExterQual ExterCond Foundation BsmtQual BsmtCond BsmtExposure BsmtFinType1 BsmtFinType2 Heating HeatingQC CentralAir Electrical KitchenQual Functional FireplaceQu GarageType GarageFinish GarageQual GarageCond PavedDrive PoolQC Fence MiscFeature SaleType SaleCondition;
+model SalePrice = MSSubClass LotFrontage LotArea OverallQual OverallCond YearBuilt YearRemodAdd MasVnrArea BsmtFinSF1 BsmtFinSF2 BsmtUnfSF TotalBsmtSF FirstFlrSF SecondFlrSF LowQualFinSF GrLivArea BsmtFullBath BsmtHalfBath FullBath HalfBath BedroomAbvGr KitchenAbvGr TotRmsAbvGrd Fireplaces GarageYrBlt GarageCars GarageArea WoodDeckSF OpenPorchSF EnclosedPorch ThreeSsnPorch ScreenPorch PoolArea MiscVal MoSold YrSold / selection=Backward(stop=CV) cvmethod=random(5) stats=adjrsq;
+output out = results2 p=predict;
+run;
+/*Check assumptions for given model*/
+*Scatterplot Matrix;
+proc sgscatter data=train2;
+matrix ;
+run;
+
+*Assumption plots and VIF;
+proc reg data=train2 plots=all;
+model / VIF;
+run;
+
+/*Get confidence intervals for final model*/
+proc glm data = train2 plots = all;
+class ;
+model /solution clparm;
+run;
+
+/*STEPWISE SELECTION*/
+*Not including any logged variables;
+proc glmselect data=train2 plots=all;
+class MSZoning Street Alley LotShape LandContour Utilities LotConfig LandSlope Neighborhood Condition1 Condition2 BldgType HouseStyle RoofStyle RoofMatl Exterior1st Exterior2nd MasVnrType ExterQual ExterCond Foundation BsmtQual BsmtCond BsmtExposure BsmtFinType1 BsmtFinType2 Heating HeatingQC CentralAir Electrical KitchenQual Functional FireplaceQu GarageType GarageFinish GarageQual GarageCond PavedDrive PoolQC Fence MiscFeature SaleType SaleCondition;
+model SalePrice = MSSubClass LotFrontage LotArea OverallQual OverallCond YearBuilt YearRemodAdd MasVnrArea BsmtFinSF1 BsmtFinSF2 BsmtUnfSF TotalBsmtSF FirstFlrSF SecondFlrSF LowQualFinSF GrLivArea BsmtFullBath BsmtHalfBath FullBath HalfBath BedroomAbvGr KitchenAbvGr TotRmsAbvGrd Fireplaces GarageYrBlt GarageCars GarageArea WoodDeckSF OpenPorchSF EnclosedPorch ThreeSsnPorch ScreenPorch PoolArea MiscVal MoSold YrSold / selection=Stepwise(stop=CV) cvmethod=random(5) stats=adjrsq;
+output out = results2 p=predict;
+run;
+
+/*Check assumptions for given model*/
+*Scatterplot Matrix;
+proc sgscatter data=train2;
+matrix ;
+run;
+
+*Assumption plots and VIF;
+proc reg data=train2 plots=all;
+model / VIF;
+run;
+
+/*Get confidence intervals for final model*/
+proc glm data = train2 plots = all;
+class ;
+model /solution clparm;
+run;
+
+/*Use the following code to output the proper file to submi in kaggle*/
+data results3;
+set results2;
+*if predict > 0 then SalePrice = exp(Predict); *uncomment if SalePrice is logged
+if predict > 0 then SalePrice = Predict;
+if predict < 0 then SalePrice = 10000; *This gets rid of any negative values;
+keep id SalePrice; *we only want to keep ID and SalePrice;
+where id > 1460; *We only want to include SalePrice from the empty Test dataset;
+run;	
+
+proc export data = results3 outfile = _dataout dbms = csv replace;
+run;
