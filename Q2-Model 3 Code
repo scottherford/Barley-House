@@ -1,0 +1,10 @@
+*Model 3;    /*Includes Ames training & test sets along with no log transformations conducted on predictors*/ /*LASSO CV-AIC*/
+ods graphics on;
+proc glmselect data=ames_train2 testdata=ames_test2
+               seed=1 plots(stepAxis=number)=(criterionPanel ASEPlot CRITERIONPANEL);
+class MSZoning Street Alley LotShape LandContour Utilities LotConfig LandSlope Neighborhood Condition1 Condition2 BldgType HouseStyle RoofStyle RoofMatl Exterior1st Exterior2nd MasVnrType ExterQual ExterCond Foundation BsmtQual BsmtCond BsmtExposure BsmtFinType1 BsmtFinType2 Heating HeatingQC CentralAir Electrical KitchenQual Functional FireplaceQu GarageType GarageFinish GarageQual GarageCond PavedDrive PoolQC Fence MiscFeature SaleType SaleCondition;
+model logSalePrice = MSSubClass LotFrontage LotArea OverallQual OverallCond YearBuilt YearRemodAdd MasVnrArea BsmtFinSF1 BsmtFinSF2 BsmtUnfSF TotalBsmtSF FirstFlrSF SecondFlrSF LowQualFinSF GrLivArea BsmtFullBath BsmtHalfBath FullBath HalfBath BedroomAbvGr KitchenAbvGr TotRmsAbvGrd Fireplaces GarageYrBlt GarageCars GarageArea WoodDeckSF OpenPorchSF EnclosedPorch ThreeSsnPorch ScreenPorch PoolArea MiscVal MoSold YrSold / selection=LASSO(choose=CV stop=AIC) CVdetails  ;
+output out=results9 p=predict;
+run;
+quit;
+ods graphics off;
